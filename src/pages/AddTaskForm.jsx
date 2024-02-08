@@ -1,7 +1,9 @@
 import React from 'react'
-import { useState } from 'react'
+import { useState, useContext} from 'react'
 import axios from 'axios';
 import Urls from '../api/baseUrl';
+import { useNavigate } from 'react-router-dom';
+import { UserContext } from '../context/AuthContext';
 
 const AddTaskForm = () => {
   const [todo, setTodo] = useState({
@@ -17,9 +19,20 @@ const AddTaskForm = () => {
     // file:''
   });
 
+  //user-context
+  const {currentUser, logout} = useContext(UserContext);
+
+  //file selection because we cannot send it with the todoState
   const [selectedFile, setSelectedFile] = useState(null);
+
+  //an object of error
   const [errors, setErrors] = useState({});
+
+  //to create a popup on successful submission.
   const [statusSubmission, setStatusSubmission] = useState(false);
+
+  //useNavigate will redirect us to the next page on successful submission
+  const navigate = useNavigate();
 
   const validateForm = ()=>{
     let errors ={};
@@ -116,7 +129,6 @@ const AddTaskForm = () => {
 
   const handleSubmit = async (e) =>{
     e.preventDefault();
-    let response;
     try{
         if(validateForm()){
             //if we have a complex form (file upload) and we are using the axios/fetch
@@ -132,14 +144,15 @@ const AddTaskForm = () => {
             //and then append the JSON string into the formData with the key -todo and value as entire string
             formData.append('todo' , todoJson);
             formData.append('file', selectedFile);
+            formData.append('email', currentUser);
 
             await axios.post(`${Urls.baseUrl}/api/todos` , formData ,{
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
             });
-            console.log("Form submitted", todo);
             setStatusSubmission(true);
+            navigate('/todos');
             setTodo({
                 name:'',
                 title:'',
@@ -162,14 +175,25 @@ const AddTaskForm = () => {
         //console.error(response);
     }
   }
-
+  
   const handleCloseSuccess = () => {
     setStatusSubmission(false);
   };
 
+  const logoutSession = async() =>{
+    await logout();
+    navigate('/');
+  }
+
   return (
     <div className='addTaskContainer'>
-        <div className='heading'><h1>Todo List App</h1></div>
+        <div className='heading'>
+            <h1>Todo List App</h1>
+            <div className="nav">
+                <button onClick={()=>navigate('/todos')}>Your Todos</button>
+                <button onClick={logoutSession}>Logout</button>
+            </div>
+        </div>
         <div className="formContainer">
             <div className='formHeading'><h1>Add your tasks here</h1></div>
 
@@ -177,7 +201,7 @@ const AddTaskForm = () => {
             {statusSubmission && (
                 <div style={{ color: 'green', marginBottom: '10px' }}>
                 Form submitted successfully!
-                <button onClick={handleCloseSuccess} style={{ marginLeft: '10px' }}>Close</button>
+                <button onClick={handleCloseSuccess} style={{ marginLeft: '10px' }}>X</button>
                 </div>
             )}
             <form onSubmit={handleSubmit}>

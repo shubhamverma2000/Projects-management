@@ -1,32 +1,50 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef, useContext} from "react"
 import axios from "axios";
 import Urls from "../api/baseUrl";
+import Modal from "./Modal";
+import { UserContext } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 const TasksList = () => {
   const [tasks, setTasks] = useState([]);
+
+  //pagination
   const [currentPage, setCurrentPage] = useState(1);
   //state used for manage if any task is found on date change.
   const [foundTask, setFoundTask] = useState(true);
-  //const [filterTasks, setFilterTasks] = useState([]);
+
+
   const [filterDate, setfilterDate] = useState(getTodayDateString());
 
   const [editedTaskId, setEditedtaskId] = useState(null);
   const [editedTitle, setEditedTitle] = useState('');
   const [editedDescription, setEditedDescription] = useState('');
-  
+
+  //modal
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedItem, setSelectedItem] =useState(null);
   const itemsPerPage = 4;
+
+  //refresh in 5 seconds
+  const [refresh, setRefresh] = useState(false);
+
+  // setInterval(()=>{
+  //   setRefresh(!refresh);
+  //   console.log(refresh);
+  // },5000);
+
+  //user-context
+  const {currentUser, logout} = useContext(UserContext);
+  const navigate = useNavigate();   
   useEffect(()=>{
-    fetchTasksByDate();
-  },[filterDate, tasks]);
+    //fetchTasks(); 
+    if(currentUser){
+      fetchTasksByDate();
+    }
+    // setDateRange();
+  },[filterDate, tasks, editedTaskId, currentUser]);
 
-  function getTodayDateString() {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-
+  //fetch all task
   const fetchTasks = async()=>{
     try{
       const response = await axios.get(`${Urls.baseUrl}/api/todos`);
@@ -47,6 +65,8 @@ const TasksList = () => {
     }
   }
 
+
+  //wrapping up of the data after fetching
   const aggregationOfTodos = (response)=>{
 
     const aggregateTodos = response.data.reduce((acc, todo)=>{
@@ -85,9 +105,18 @@ const TasksList = () => {
     }
   }
 
+  //date filter functionality
+  function getTodayDateString() {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
   const fetchTasksByDate = async() =>{
     try{
-      const response = await axios.get(`${Urls.baseUrl}/api/todos/bydate/${filterDate}`);
+      const response = await axios.get(`${Urls.baseUrl}/api/todos/${currentUser}/${filterDate}`);
       if(response.data.length !== 0){
         
         //console.log(response.data);
@@ -113,21 +142,41 @@ const TasksList = () => {
     //console.log(date);
   }
 
+  //update functionality
   const handleEditClick = (task) =>{
     setEditedtaskId(task.todoId);
     setEditedTitle(task.title);
     setEditedDescription(task.description);
   }
 
-  const updateTask = async(todoId, updatedTask) =>{
+  const updateTask = async(todoId) =>{
     try{
-      console.log(updatedTask);
-      console.log(tasks[0]);
-      await axios.put(`${Urls.baseUrl}/api/todos/${todoId}`, updatedTask);
+
+      const data = new URLSearchParams();
+      data.append('title', editedTitle);
+      data.append('description', editedDescription);
+
+      //console.log(updatedTask);
+      await axios.put(`${Urls.baseUrl}/api/todos/${todoId}`, data);
       setEditedtaskId(null);
     }catch(error){
       alert("Error in updating the task" + error);
     }
+  }
+
+
+  //handlemodal
+  const openModal = () => {
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+  };
+
+  const handleModalItem = (task) =>{
+    setSelectedItem(task);
+    openModal();
   }
 
   //pagination
@@ -137,6 +186,11 @@ const TasksList = () => {
 
   //function for changing the page
   const paginate = pageNumber =>setCurrentPage(pageNumber);
+
+  const logoutSession = async() =>{
+    await logout();
+    navigate('/');
+  }
 
   return (
     <div className='Tasks'>
@@ -148,6 +202,10 @@ const TasksList = () => {
             value={filterDate}
             onChange={handleDateChange}
         />
+        <div className="nav">
+          <button onClick={()=>navigate('/addtask')}>Add Task</button>
+          <button onClick={logoutSession}>Logout</button>
+        </div>
       </div>
       {foundTask ? <div className="taskContainer">
           <ul className="list">
@@ -173,7 +231,7 @@ const TasksList = () => {
                       <div className="actions">
                         <button className="update"
                           onClick={()=>{
-                            updateTask(task.todoId , {...task , title: editedTitle , description : editedDescription})
+                            updateTask(task.todoId)
                           }}
                         >
                           Save
@@ -183,24 +241,25 @@ const TasksList = () => {
                     </div>
 
                   ) : (
-                    <div className="item">
-                      <p className="title">{ task.title}</p>
-                      <p className="description">{task.description}</p>
-                      <ul className="days">{task.days.map((item)=>(
-                          <li key={item.dayId}>{item.day}</li>
-                      ))}</ul>
-                      <div className="actions">
-                        <button className="update"
-                          onClick={()=>handleEditClick(task)}
-                        > Update
-                        </button>
-                        <button className="delete" onClick={()=>deleteTask(task.todoId)}>Delete</button>
-                      </div>
-                  </div>
+                      <div className="item" onClick={()=>handleModalItem(task)}> 
+                        <p className="title">{ task.title}</p>
+                        <p className="description">{task.description}</p>
+                        <ul className="days">{task.days.map((item)=>(
+                            <li key={item.dayId}>{item.day}</li>
+                        ))}</ul>
+                        <div className="actions">
+                          <button className="update"
+                            onClick={()=>handleEditClick(task)}
+                          > Update
+                          </button>
+                          <button className="delete" onClick={()=>deleteTask(task.todoId)}>Delete</button>
+                        </div>
+                      </div>   
                   )}
                   
                 </li>
               ))}
+              {modalOpen && <Modal item={selectedItem} onClose={closeModal} />}
           </ul>
         </div> : <div className="item">
                       <p>No tasks for this day!</p>
